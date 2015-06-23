@@ -1,22 +1,21 @@
 # -*- coding: utf-8 -*-
-from strategies import topic
-from jsonrpc_service import StrategyWorkerWebService
-
-from crawlfrontier.settings import Settings
-from crawlfrontier.worker.score import ScoringWorker
-from crawlfrontier.worker.utils import CallLaterOnce
-
-from kazoo.client import KazooClient, KazooState
-from twisted.internet import reactor
-from kafka import KafkaClient, SimpleConsumer, SimpleProducer
-from kafka.common import OffsetOutOfRangeError
-
 import logging
 from argparse import ArgumentParser
 from random import randint
 from sys import maxint
 from urllib import urlopen
 from json import loads
+
+from crawlfrontier.settings import Settings
+from crawlfrontier.worker.score import ScoringWorker
+from crawlfrontier.worker.utils import CallLaterOnce
+from kazoo.client import KazooClient, KazooState
+from twisted.internet import reactor
+from kafka import KafkaClient, SimpleConsumer, SimpleProducer
+from kafka.common import OffsetOutOfRangeError
+
+from strategies import topic
+from fronteracrawler.worker.jsonrpc_service import StrategyWorkerWebService
 
 
 logging.basicConfig()
@@ -111,12 +110,15 @@ class HHStrategyWorker(ScoringWorker):
         root = "/frontera"
         for znode_name in self._zk.get_children(root):
             location = self._zk.get(root+"/"+znode_name)
+            if location == self.process_info:
+                continue
             url = "http://%s/jsonrpc"
             reqid = randint(1, maxint)
             data = '{"id": %d, "method": "new_job_id", "job_id": %d}' % (reqid, self.job_id)
             fh = urlopen(url, data)
             response = fh.read()
             result = loads(response)
+            print result
             if result['id'] != reqid or result['result'] != "success":
                 logger.error("Can't set new job id on %s, error %s" % (location, result['error']))
                 raise Exception("Error setting new job id")

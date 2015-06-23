@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
-from jsonrpc_service import FronteraWorkerWebService
+from argparse import ArgumentParser
+import logging
+
 from crawlfrontier.settings import Settings
 from crawlfrontier.worker.main import FrontierWorker
 from kazoo.client import KazooClient, KazooState
 
-from argparse import ArgumentParser
-import logging
+from fronteracrawler.worker.jsonrpc_service import FronteraWorkerWebService
+
 
 logging.basicConfig()
 logger = logging.getLogger("cf")
