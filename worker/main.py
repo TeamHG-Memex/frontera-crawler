@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from jsonrpc_service import FronteraWorkerWebService
 from crawlfrontier.settings import Settings
 from crawlfrontier.worker.main import FrontierWorker
-from crawlfrontier.worker.server import WorkerJsonRpcService
-
 from kazoo.client import KazooClient, KazooState
 
 from argparse import ArgumentParser
@@ -21,7 +20,7 @@ class HHFrontierWorker(FrontierWorker):
         self._zk = KazooClient(hosts=settings.get('ZOOKEEPER_LOCATION'))
         self._zk.add_listener(self.zookeeper_listener)
         self._zk.start()
-        self.znode_path = self._zk.create("/frontera/fworker", ephemeral=True, sequence=True, makepath=True)
+        self.znode_path = self._zk.create("/frontera/hh-f-worker", ephemeral=True, sequence=True, makepath=True)
 
     def zookeeper_listener(self, state):
         if state == KazooState.LOST:
@@ -37,6 +36,7 @@ class HHFrontierWorker(FrontierWorker):
     def set_process_info(self, process_info):
         self.process_info = process_info
         self._zk.set(self.znode_path, self.process_info)
+
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="Crawl frontier worker.")
@@ -58,6 +58,6 @@ if __name__ == '__main__':
         settings.set("JSONRPC_PORT", [args.port])
 
     worker = HHFrontierWorker(settings, args.no_batches, args.no_scoring, args.no_incoming)
-    server = WorkerJsonRpcService(worker, settings)
+    server = FronteraWorkerWebService(worker, settings)
     server.start_listening()
     worker.run()
