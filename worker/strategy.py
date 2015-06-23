@@ -1,16 +1,22 @@
 # -*- coding: utf-8 -*-
 from strategies import topic
-from jsonrpc_service import ManagementWebService
+from jsonrpc_service import StrategyWorkerWebService
 
 from crawlfrontier.settings import Settings
 from crawlfrontier.worker.score import ScoringWorker
 from crawlfrontier.worker.utils import CallLaterOnce
+
+from kazoo.client import KazooClient, KazooState
 from twisted.internet import reactor
 from kafka import KafkaClient, SimpleConsumer, SimpleProducer
 from kafka.common import OffsetOutOfRangeError
 
 import logging
 from argparse import ArgumentParser
+from random import randint
+from sys import maxint
+from urllib import urlopen
+from json import loads
 
 
 logging.basicConfig()
@@ -29,7 +35,6 @@ class Slot(object):
 
     def error(self, f):
         logger.error(f)
-        reactor.stop()
 
     def schedule(self):
         self.log_processing.schedule()
@@ -51,6 +56,28 @@ class HHStrategyWorker(ScoringWorker):
                                           max_buffer_size=10485760)
         self.producer_hh = SimpleProducer(kafka_hh)
         self.results_topic = settings.get("FRONTERA_RESULTS_TOPIC")
+        self.init_zookeeper()
+
+    def init_zookeeper(self):
+        self._zk = KazooClient(hosts=settings.get('ZOOKEEPER_LOCATION'))
+        self._zk.add_listener(self.zookeeper_listener)
+        self._zk.start()
+        self.znode_path = self._zk.create("/frontera/hh-strategy-worker", ephemeral=True, sequence=True, makepath=True)
+
+    def zookeeper_listener(self, state):
+        if state == KazooState.LOST:
+            # Register somewhere that the session was lost
+            pass
+        elif state == KazooState.SUSPENDED:
+            # Handle being disconnected from Zookeeper
+            pass
+        else:
+            # Handle being connected/reconnected to Zookeeper
+            pass
+
+    def set_process_info(self, process_info):
+        self.process_info = process_info
+        self._zk.set(self.znode_path, self.process_info)
 
     def run(self):
         self.slot.schedule()
@@ -74,6 +101,27 @@ class HHStrategyWorker(ScoringWorker):
 
     def reset(self):
         self.slot.is_active = False
+        # switch job_id ("scoring" should be always in the same process as batch gen/log proc)
+        # notify other workers via jsonrpc with new_job_id
+        # if all is good:
+        # clean hbase: metadata, queue
+        # make it active if all above is successful.
+
+        self.job_id = randint(1, maxint)
+        root = "/frontera"
+        for znode_name in self._zk.get_children(root):
+            location = self._zk.get(root+"/"+znode_name)
+            url = "http://%s/jsonrpc"
+            reqid = randint(1, maxint)
+            data = '{"id": %d, "method": "new_job_id", "job_id": %d}' % (reqid, self.job_id)
+            fh = urlopen(url, data)
+            response = fh.read()
+            result = loads(response)
+            if result['id'] != reqid or result['result'] != "success":
+                logger.error("Can't set new job id on %s, error %s" % (location, result['error']))
+                raise Exception("Error setting new job id")
+
+
 
 
 if __name__ == '__main__':
@@ -87,6 +135,6 @@ if __name__ == '__main__':
     logger.setLevel(args.log_level)
     settings = Settings(module=args.config)
     worker = HHStrategyWorker(settings)
-    mgmt_service = ManagementWebService(worker, settings)
-    mgmt_service.start_listening()
+    web_service = StrategyWorkerWebService(worker, settings)
+    web_service.start_listening()
     worker.run()

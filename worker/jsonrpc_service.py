@@ -25,6 +25,7 @@ class ManagementResource(JsonRpcResource):
     def process_request(self, method, jrequest):
         if method == '/setup':
             self.worker.setup(jrequest['seed_urls'])
+            return jsonrpc_result(jrequest['id'], "success")
 
         if method == '/reset':
             self.worker.reset()
@@ -32,10 +33,41 @@ class ManagementResource(JsonRpcResource):
         raise JsonRpcError(400, "Unknown method")
 
 
-class ManagementWebService(JsonRpcService):
+class StrategyWorkerWebService(JsonRpcService):
 
     def __init__(self, worker, settings):
         root = RootResource()
         root.putChild('status', StatusResource(worker))
-        root.putChild('jsonrpc', JsonRpcResource(worker))
+        root.putChild('jsonrpc', ManagementResource(worker))
         JsonRpcService.__init__(self, root, settings)
+        self.worker = worker
+
+    def start_listening(self):
+        JsonRpcService.start_listening(self)
+        address = self.port.getHost()
+        self.worker.set_process_info("%s:%d" % (address.host, address.port))
+
+
+class FronteraWorkerResource(JsonRpcResource):
+
+    ws_name = 'jsonrpc'
+
+    def process_request(self, method, jrequest):
+        if method == '/new_job_id':
+            self.worker.job_id = jrequest['job_id']
+            return jsonrpc_result(jrequest['id'], "success")
+        raise JsonRpcError(400, "Unknown method")
+
+
+class FronteraWorkerWebService(JsonRpcService):
+    def __init__(self, worker, settings):
+        root = RootResource()
+        root.putChild('status', StatusResource(worker))
+        root.putChild('jsonrpc', FronteraWorkerResource(worker))
+        JsonRpcService.__init__(self, root, settings)
+        self.worker = worker
+
+    def start_listening(self):
+        JsonRpcService.start_listening(self)
+        address = self.port.getHost()
+        self.worker.set_process_info("%s:%d" % (address.host, address.port))
