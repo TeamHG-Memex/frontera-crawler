@@ -13,8 +13,8 @@ class StatusResource(JsonResource):
 
     def render_GET(self, txrequest):
         return {
-            'is_active': self.worker.slot.is_active,
-            'stats': self.worker.stats
+            'stats': self.worker.stats,
+            'job_id': self.worker.job_id
         }
 
 
@@ -23,13 +23,13 @@ class ManagementResource(JsonRpcResource):
     ws_name = 'jsonrpc'
 
     def process_request(self, method, jrequest):
-        if method == '/setup':
+        if method == 'setup':
             self.worker.setup(jrequest['seed_urls'])
             return jsonrpc_result(jrequest['id'], "success")
 
-        if method == '/reset':
+        if method == 'reset':
             self.worker.reset()
-            return jsonrpc_result(jrequest['id'], "success")
+            return jsonrpc_result(jrequest['id'], {"status": "success", "job_id": self.worker.job_id})
         raise JsonRpcError(400, "Unknown method")
 
 
@@ -53,7 +53,7 @@ class FronteraWorkerResource(JsonRpcResource):
     ws_name = 'jsonrpc'
 
     def process_request(self, method, jrequest):
-        if method == '/new_job_id':
+        if method == 'new_job_id':
             self.worker.job_id = jrequest['job_id']
             return jsonrpc_result(jrequest['id'], "success")
         raise JsonRpcError(400, "Unknown method")
