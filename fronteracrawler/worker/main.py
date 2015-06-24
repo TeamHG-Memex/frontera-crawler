@@ -39,6 +39,10 @@ class HHFrontierWorker(FrontierWorker):
         self.process_info = process_info
         self._zk.set(self.znode_path, self.process_info)
 
+    def set_job_id(self, job_id):
+        self._backend.set_job_id(job_id)
+        self.job_id = job_id
+
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="Crawl frontier worker.")

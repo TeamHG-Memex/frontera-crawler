@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 import logging
 from argparse import ArgumentParser
-from random import randint
-from sys import maxint
 from urllib import urlopen
 from json import loads
 
 from crawlfrontier.settings import Settings
 from crawlfrontier.worker.score import ScoringWorker
 from crawlfrontier.worker.utils import CallLaterOnce
+from crawlfrontier.utils.misc import generate_job_id
 from twisted.internet import reactor
 from kafka import KafkaClient, SimpleConsumer, SimpleProducer
 from kafka.common import OffsetOutOfRangeError
@@ -103,17 +102,17 @@ class HHStrategyWorker(ScoringWorker):
         # switch job_id ("scoring" should be always in the same process as batch gen/log proc)
         # notify other workers via jsonrpc with new_job_id
         # if all is good:
-        # clean hbase: metadata, queue
+        # change job_id in hbase backend: metadata, queue
         # make it active if all above is successful.
 
-        self.job_id = randint(1, maxint)
+        self.job_id = generate_job_id()
         root = "/frontera"
         for znode_name in self._zk.get_children(root):
             location, _ = self._zk.get(root+"/"+znode_name)
             if location == self.process_info:
                 continue
             url = "http://%s/jsonrpc" % location
-            reqid = randint(1, maxint)
+            reqid = generate_job_id()
             data = '{"id": %d, "method": "new_job_id", "job_id": %d}' % (reqid, self.job_id)
             response = urlopen(url, data).read()
             result = loads(response)
@@ -122,8 +121,8 @@ class HHStrategyWorker(ScoringWorker):
                 logger.error("Can't set new job id on %s, error %s" % (location, result['error']))
                 raise Exception("Error setting new job id")
 
-
-
+        self.backend.set_job_id(self.job_id)
+        self.slot.is_active = True
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="HH strategy worker.")

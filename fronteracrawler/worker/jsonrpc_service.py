@@ -54,7 +54,7 @@ class FronteraWorkerResource(JsonRpcResource):
 
     def process_request(self, method, jrequest):
         if method == 'new_job_id':
-            self.worker.job_id = jrequest['job_id']
+            self.worker.set_job_id(jrequest['job_id'])
             return jsonrpc_result(jrequest['id'], "success")
         raise JsonRpcError(400, "Unknown method")
 
