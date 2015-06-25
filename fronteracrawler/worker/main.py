@@ -5,9 +5,9 @@ import logging
 
 from crawlfrontier.settings import Settings
 from crawlfrontier.worker.main import FrontierWorker
-from kazoo.client import KazooClient, KazooState
 
 from fronteracrawler.worker.jsonrpc_service import FronteraWorkerWebService
+from kazoo.client import KazooClient, KazooState
 
 
 logging.basicConfig()
@@ -38,6 +38,10 @@ class HHFrontierWorker(FrontierWorker):
     def set_process_info(self, process_info):
         self.process_info = process_info
         self._zk.set(self.znode_path, self.process_info)
+
+    def set_job_id(self, job_id):
+        self._backend.set_job_id(job_id)
+        self.job_id = job_id
 
 
 if __name__ == '__main__':
