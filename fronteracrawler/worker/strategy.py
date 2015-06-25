@@ -22,11 +22,9 @@ logger = logging.getLogger("score")
 
 
 class Slot(object):
-    def __init__(self, log_processing, consume_incoming):
+    def __init__(self, log_processing):
         self.log_processing = CallLaterOnce(log_processing)
         self.log_processing.setErrback(self.error)
-        self.consume_incoming = CallLaterOnce(consume_incoming)
-        self.consume_incoming.setErrback(self.error)
         self.scheduling = CallLaterOnce(self.schedule)
         self.scheduling.setErrback(self.error)
         self.is_active = False
@@ -35,9 +33,8 @@ class Slot(object):
         logger.error(f)
 
     def schedule(self):
-        self.log_processing.schedule()
         if self.is_active:
-            self.consume_incoming.schedule()
+            self.log_processing.schedule()
 
         self.scheduling.schedule(1.0)
 
@@ -45,7 +42,7 @@ class Slot(object):
 class HHStrategyWorker(ScoringWorker):
     def __init__(self, settings):
         super(HHStrategyWorker, self).__init__(settings, topic)
-        self.slot = Slot(log_processing=self.work, consume_incoming=self.incoming)
+        self.slot = Slot(log_processing=self.work)
         kafka_hh = KafkaClient(settings.get('KAFKA_LOCATION_HH'))
         self.consumer_hh = SimpleConsumer(kafka_hh,
                                           settings.get('FRONTERA_GROUP'),
@@ -54,6 +51,7 @@ class HHStrategyWorker(ScoringWorker):
                                           max_buffer_size=10485760)
         self.producer_hh = SimpleProducer(kafka_hh)
         self.results_topic = settings.get("FRONTERA_RESULTS_TOPIC")
+        self.job_config = {}
         self.init_zookeeper()
 
     def init_zookeeper(self):
@@ -85,7 +83,21 @@ class HHStrategyWorker(ScoringWorker):
         consumed = 0
         try:
             for m in self._in_consumer.get_messages(count=32):
-                consumed += 1
+                try:
+                    msg = loads(m.message.value)
+                except ValueError, ve:
+                    logger.error("Decoding error %s, message %s" % (ve, m.message.value))
+                else:
+                    self.job_config = {
+                        'workspace': msg['workspace'],
+                        'nResults': msg.get('nResults', 0),
+                        'timestamp': msg['timestamp'],
+                        'source': msg['source'],
+                        'excluded': msg['excluded'],
+                        'included': msg['included']
+                    }
+                finally:
+                    consumed += 1
         except OffsetOutOfRangeError, e:
             # https://github.com/mumrah/kafka-python/issues/263
             self._in_consumer.seek(0, 2)  # moving to the tail of the log
@@ -95,7 +107,15 @@ class HHStrategyWorker(ScoringWorker):
         self.slot.schedule()
 
     def setup(self, seed_urls):
-        pass
+        # Consume configuration from Kafka topic
+        self.incoming()
+
+        # TODO: That should be executed on all strategy worker instances
+        self.strategy.configure(self.job_config)
+
+        # FIXME: add seeds after running Frontier Manager components pipeline on them.
+
+        self.slot.is_active = True
 
     def reset(self):
         self.slot.is_active = False
@@ -122,7 +142,7 @@ class HHStrategyWorker(ScoringWorker):
                 raise Exception("Error setting new job id")
 
         self.backend.set_job_id(self.job_id)
-        self.slot.is_active = True
+
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="HH strategy worker.")
