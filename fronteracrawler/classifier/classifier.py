@@ -30,8 +30,9 @@ class TopicClassifier(object):
         p = 1.0 / count
         for word in include: obj.topic[word] = p
         obj.exclude_set = set(exclude)
+        obj.threshold = p
 
-    def classify_paragraphs(self, paragraphs):
+    def score_paragraphs(self, paragraphs):
         topic_probability = 0.0
         for p in paragraphs:
             for token in word_tokenize(p):
@@ -39,10 +40,13 @@ class TopicClassifier(object):
                     topic_probability += self.topic[token]
                     continue
                 if token in self.exclude_set:
-                    return False
-        if topic_probability > self.threshold:
-            return True
-        return False
+                    return None
+        return topic_probability
+
+    def classify_paragraphs(self, score):
+        if not score:
+            return False
+        return True if score > self.threshold else False
 
 
 if __name__ == '__main__':
