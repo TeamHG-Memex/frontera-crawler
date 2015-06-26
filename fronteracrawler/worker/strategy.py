@@ -6,7 +6,7 @@ from zookeeper import ZookeeperSession
 import logging
 from argparse import ArgumentParser
 from urllib import urlopen
-from json import loads
+from json import loads, dumps
 
 from crawlfrontier.settings import Settings
 from crawlfrontier.worker.score import ScoringWorker
@@ -42,6 +42,9 @@ class Slot(object):
 
 
 class HHStrategyWorker(ScoringWorker):
+
+    worker_prefix = 'hh-strategy-worker'
+
     def __init__(self, settings):
         super(HHStrategyWorker, self).__init__(settings, topic)
         self.slot = Slot(log_processing=self.work)
@@ -54,7 +57,7 @@ class HHStrategyWorker(ScoringWorker):
         self.producer_hh = SimpleProducer(kafka_hh)
         self.results_topic = settings.get("FRONTERA_RESULTS_TOPIC")
         self.job_config = {}
-        self.zookeeper = ZookeeperSession(settings.get('ZOOKEEPER_LOCATION'), worker_prefix='hh-strategy-worker')
+        self.zookeeper = ZookeeperSession(settings.get('ZOOKEEPER_LOCATION'), worker_prefix=self.worker_prefix)
 
     def set_process_info(self, process_info):
         self.process_info = process_info
@@ -95,8 +98,20 @@ class HHStrategyWorker(ScoringWorker):
         # Consume configuration from Kafka topic
         self.incoming()
 
-        # TODO: That should be executed on all strategy worker instances
+        # Sending configuration to all strategy worker instances
         self.configure(self.job_config)
+        for location in self.zookeeper.get_workers(prefix=self.worker_prefix):
+            if location == self.process_info:
+                continue
+            url = "http://%s/jsonrpc" % location
+            reqid = generate_job_id()
+            data = '{"id": %d, "method": "configure", "params": %s}' % (reqid, dumps(self.job_config))
+            response = urlopen(url, data).read()
+            result = loads(response)
+            assert result['id'] == reqid
+            if 'result' not in result or result['result'] != "success":
+                logger.error("Can't configure strategy worker %s, error %s" % (location, result['error']))
+                raise Exception("Error configuring strategy workers")
 
         # Sending seed urls into pipeline
         requests = [self._manager.request_model(url) for url in seed_urls]
@@ -129,7 +144,7 @@ class HHStrategyWorker(ScoringWorker):
         self.backend.set_job_id(self.job_id)
 
     def configure(self, config):
-        self.strategy.cnofigure(config)
+        self.strategy.configure(config)
 
     def send_add_seeds(self, seeds):
         # here we simulate behavior of spider, mainly because of middlewares pipeline
