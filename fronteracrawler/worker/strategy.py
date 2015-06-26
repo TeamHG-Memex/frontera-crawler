@@ -7,6 +7,8 @@ from json import loads
 from crawlfrontier.settings import Settings
 from crawlfrontier.worker.score import ScoringWorker
 from crawlfrontier.worker.utils import CallLaterOnce
+from crawlfrontier.core.manager import FrontierManager
+from crawlfrontier.contrib.backends.remote import KafkaBackend
 from crawlfrontier.utils.misc import generate_job_id
 from twisted.internet import reactor
 from kafka import KafkaClient, SimpleConsumer, SimpleProducer
@@ -113,7 +115,9 @@ class HHStrategyWorker(ScoringWorker):
         # TODO: That should be executed on all strategy worker instances
         self.strategy.configure(self.job_config)
 
-        # FIXME: add seeds after running Frontier Manager components pipeline on them.
+        # Sending seed urls into pipeline
+        requests = [self._manager.request_model(url) for url in seed_urls]
+        self.send_add_seeds(requests)
 
         self.slot.is_active = True
 
@@ -142,6 +146,15 @@ class HHStrategyWorker(ScoringWorker):
                 raise Exception("Error setting new job id")
 
         self.backend.set_job_id(self.job_id)
+
+    def send_add_seeds(self, seeds):
+        # here we simulate behavior of spider, mainly because of middlewares pipeline
+        settings = Settings(self._manager.settings)
+        settings.set('BACKEND', KafkaBackend)
+        settings.set('SPIDER_PARTITION_ID', 0)
+        manager = FrontierManager.from_settings(settings)
+        manager.add_seeds(seeds)
+        del manager
 
 
 if __name__ == '__main__':
