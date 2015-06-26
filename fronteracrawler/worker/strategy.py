@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+from fronteracrawler.strategies import topic
+from jsonrpc_service import StrategyWorkerWebService
+from zookeeper import ZookeeperSession
+
 import logging
 from argparse import ArgumentParser
 from urllib import urlopen
@@ -13,10 +17,6 @@ from crawlfrontier.utils.misc import generate_job_id
 from twisted.internet import reactor
 from kafka import KafkaClient, SimpleConsumer, SimpleProducer
 from kafka.common import OffsetOutOfRangeError
-
-from fronteracrawler.strategies import topic
-from fronteracrawler.worker.jsonrpc_service import StrategyWorkerWebService
-from kazoo.client import KazooClient, KazooState
 
 
 logging.basicConfig()
@@ -54,28 +54,11 @@ class HHStrategyWorker(ScoringWorker):
         self.producer_hh = SimpleProducer(kafka_hh)
         self.results_topic = settings.get("FRONTERA_RESULTS_TOPIC")
         self.job_config = {}
-        self.init_zookeeper()
-
-    def init_zookeeper(self):
-        self._zk = KazooClient(hosts=settings.get('ZOOKEEPER_LOCATION'))
-        self._zk.add_listener(self.zookeeper_listener)
-        self._zk.start()
-        self.znode_path = self._zk.create("/frontera/hh-strategy-worker", ephemeral=True, sequence=True, makepath=True)
-
-    def zookeeper_listener(self, state):
-        if state == KazooState.LOST:
-            # Register somewhere that the session was lost
-            pass
-        elif state == KazooState.SUSPENDED:
-            # Handle being disconnected from Zookeeper
-            pass
-        else:
-            # Handle being connected/reconnected to Zookeeper
-            pass
+        self.zookeeper = ZookeeperSession(settings.get('ZOOKEEPER_LOCATION'), worker_prefix='hh-strategy-worker')
 
     def set_process_info(self, process_info):
         self.process_info = process_info
-        self._zk.set(self.znode_path, self.process_info)
+        self.zookeeper.set(process_info)
 
     def run(self):
         self.slot.schedule()
@@ -113,7 +96,7 @@ class HHStrategyWorker(ScoringWorker):
         self.incoming()
 
         # TODO: That should be executed on all strategy worker instances
-        self.strategy.configure(self.job_config)
+        self.configure(self.job_config)
 
         # Sending seed urls into pipeline
         requests = [self._manager.request_model(url) for url in seed_urls]
@@ -130,9 +113,7 @@ class HHStrategyWorker(ScoringWorker):
         # make it active if all above is successful.
 
         self.job_id = generate_job_id()
-        root = "/frontera"
-        for znode_name in self._zk.get_children(root):
-            location, _ = self._zk.get(root+"/"+znode_name)
+        for location in self.zookeeper.get_workers():
             if location == self.process_info:
                 continue
             url = "http://%s/jsonrpc" % location
@@ -146,6 +127,9 @@ class HHStrategyWorker(ScoringWorker):
                 raise Exception("Error setting new job id")
 
         self.backend.set_job_id(self.job_id)
+
+    def configure(self, config):
+        self.strategy.cnofigure(config)
 
     def send_add_seeds(self, seeds):
         # here we simulate behavior of spider, mainly because of middlewares pipeline
