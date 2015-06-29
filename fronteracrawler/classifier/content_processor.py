@@ -3,6 +3,7 @@ import lxml.etree as etree
 from scrapy.contrib.linkextractors.lxmlhtml import LxmlParserLinkExtractor, FilteringLinkExtractor
 from scrapy.selector import Selector
 from scrapy.utils.response import get_base_url
+from scrapy.http.response.text import TextResponse
 from json import dumps as json_dumps
 
 
@@ -43,6 +44,8 @@ class ContentProcessor(object):
         self.skip_text = skip_text
 
     def process_response(self, response):
+        if not isinstance(response, TextResponse):
+            return None
         html = Selector(response)
         pc = ParsedContent()
         if not self.skip_text:
