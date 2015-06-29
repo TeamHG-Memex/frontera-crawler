@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from crawlfrontier.worker.server import JsonRpcService, JsonResource, JsonRpcResource, RootResource, \
+from crawlfrontier.worker.server import JsonRpcService, JsonResource, WorkerJsonRpcResource, RootResource, \
     JsonRpcError, jsonrpc_result
 
 
@@ -18,7 +18,7 @@ class StatusResource(JsonResource):
         }
 
 
-class ManagementResource(JsonRpcResource):
+class ManagementResource(WorkerJsonRpcResource):
 
     ws_name = 'jsonrpc'
 
@@ -59,7 +59,7 @@ class StrategyWorkerWebService(JsonRpcService):
         self.worker.set_process_info("%s:%d" % (address.host, address.port))
 
 
-class FronteraWorkerResource(JsonRpcResource):
+class FronteraWorkerResource(WorkerJsonRpcResource):
 
     ws_name = 'jsonrpc'
 
