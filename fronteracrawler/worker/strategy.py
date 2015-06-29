@@ -57,7 +57,7 @@ class HHStrategyWorker(ScoringWorker):
         self.producer_hh = SimpleProducer(kafka_hh)
         self.results_topic = settings.get("FRONTERA_RESULTS_TOPIC")
         self.job_config = {}
-        self.zookeeper = ZookeeperSession(settings.get('ZOOKEEPER_LOCATION'), worker_prefix=self.worker_prefix)
+        self.zookeeper = ZookeeperSession(settings.get('ZOOKEEPER_LOCATION'), name_prefix=self.worker_prefix)
 
     def set_process_info(self, process_info):
         self.process_info = process_info
@@ -94,9 +94,12 @@ class HHStrategyWorker(ScoringWorker):
         self.stats['frontera_incoming_consumed'] = consumed
         self.slot.schedule()
 
-    def setup(self, seed_urls):
+    def setup(self, seed_urls, job_config):
         # Consume configuration from Kafka topic
-        self.incoming()
+        if not job_config:
+            self.incoming()
+        else:
+            self.job_config = job_config
 
         # Sending configuration to all strategy worker instances
         self.configure(self.job_config)
@@ -116,8 +119,6 @@ class HHStrategyWorker(ScoringWorker):
         # Sending seed urls into pipeline
         requests = [self._manager.request_model(url) for url in seed_urls]
         self.send_add_seeds(requests)
-
-        self.slot.is_active = True
 
     def reset(self):
         self.slot.is_active = False
@@ -145,6 +146,10 @@ class HHStrategyWorker(ScoringWorker):
 
     def configure(self, config):
         self.strategy.configure(config)
+        self.slot.is_active = True
+
+    def set_job_id(self, job_id):
+        self.job_id = job_id
 
     def send_add_seeds(self, seeds):
         # here we simulate behavior of spider, mainly because of middlewares pipeline
@@ -152,6 +157,7 @@ class HHStrategyWorker(ScoringWorker):
         settings.set('BACKEND', KafkaBackend)
         settings.set('SPIDER_PARTITION_ID', 0)
         manager = FrontierManager.from_settings(settings)
+        manager.start()
         manager.add_seeds(seeds)
         del manager
 

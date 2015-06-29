@@ -24,15 +24,22 @@ class ManagementResource(JsonRpcResource):
 
     def process_request(self, method, jrequest):
         if method == 'setup':
-            self.worker.setup(jrequest['seed_urls'])
+            self.worker.setup(jrequest['params']['seed_urls'], jrequest['params'].get('job_config', None))
             return jsonrpc_result(jrequest['id'], "success")
         if method == 'reset':
             self.worker.reset()
             return jsonrpc_result(jrequest['id'], {"status": "success", "job_id": self.worker.job_id})
+
         if method == 'configure':
             if type(jrequest['params']) != dict:
                 raise JsonRpcError(400, "Expecting dict with configuration parameters.")
             self.worker.configure(jrequest['params'])
+            return jsonrpc_result(jrequest['id'], "success")
+
+        if method == 'new_job_id':
+            if type(jrequest['job_id']) != int or jrequest['job_id'] <= 0:
+                raise JsonRpcError(400, "Job id must be of type unsigned integer, bigger than 0")
+            self.worker.set_job_id(jrequest['job_id'])
             return jsonrpc_result(jrequest['id'], "success")
         raise JsonRpcError(400, "Unknown method")
 
