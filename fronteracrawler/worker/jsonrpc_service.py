@@ -26,10 +26,14 @@ class ManagementResource(JsonRpcResource):
         if method == 'setup':
             self.worker.setup(jrequest['seed_urls'])
             return jsonrpc_result(jrequest['id'], "success")
-
         if method == 'reset':
             self.worker.reset()
             return jsonrpc_result(jrequest['id'], {"status": "success", "job_id": self.worker.job_id})
+        if method == 'configure':
+            if type(jrequest['params']) != dict:
+                raise JsonRpcError(400, "Expecting dict with configuration parameters.")
+            self.worker.configure(jrequest['params'])
+            return jsonrpc_result(jrequest['id'], "success")
         raise JsonRpcError(400, "Unknown method")
 
 
