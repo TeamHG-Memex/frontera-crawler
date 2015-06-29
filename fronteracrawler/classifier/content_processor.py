@@ -35,26 +35,27 @@ class ParsedContent(object):
 
 
 class ContentProcessor(object):
-    def __init__(self):
+    def __init__(self, skip_text=False):
         lx = LxmlParserLinkExtractor()
         self.linkextractor = FilteringLinkExtractor(lx, allow=(), deny=(), allow_domains=(),
                                                     deny_domains=(), restrict_xpaths=(), canonicalize=True,
                                                     deny_extensions=None)
+        self.skip_text = skip_text
 
     def process_response(self, response):
         html = Selector(response)
-        pc = self._extract_text(html)
+        pc = ParsedContent()
+        if not self.skip_text:
+            self._extract_text(pc, html)
         pc.base_url = get_base_url(response)
         pc.links = self.linkextractor._extract_links(html, response.url, response.encoding, pc.base_url)
         pc.links = self.linkextractor._process_links(pc.links)
         return pc
 
-    def _extract_text(self, selector):
+    def _extract_text(self, pc, selector):
         def _meta_name(el, values):
             return el.tag == 'meta' and 'name' in el.attrib and 'content' in el.attrib and \
                    el.attrib['name'].lower() in values
-
-        pc = ParsedContent()
         for el in selector._root.iter(etree.Element):
             # TODO: open graph protocol support
             if _meta_name(el, ['description', 'og:description']):
