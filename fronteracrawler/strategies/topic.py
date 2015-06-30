@@ -39,19 +39,27 @@ class CrawlStrategy(object):
     def page_crawled(self, response, links):
         scores = {}
         response.meta['state'] = _state.get_id('CRAWLED')
-        pc = self.content_processor.process_response(response)
-        score = self.classifier.score_paragraphs(pc)
-        drill_down = self.classifier.classify_paragraphs(score)
 
-        if drill_down:
-            self.results[response.meta['fingerprint']] = score
+        if 'p_score' not in response.meta:
+            drill_down = False
+        else:
+            score = response.meta['p_score']
+            drill_down = self.classifier.classify_paragraphs(score)
+            if drill_down:
+                self.results[response.meta['fingerprint']] = score
 
         scheduled = 0
         for link in links:
             if link.meta['state'] is None:
                 url, fingerprint, _ = self.canonicalsolver.get_canonical_url(link)
-                scores[fingerprint] = score
-                link.meta['state'] = self.S_QUEUED if drill_down else self.S_NOT_CRAWLED
+                if drill_down:
+                    url_parts = urlparse(url)
+                    path_parts = url_parts.path.split('/')
+                    scores[fingerprint] = 1.0 / (len(path_parts) + len(url_parts.path)*0.1)
+                    link.meta['state'] = self.S_QUEUED
+                else:
+                    scores[fingerprint] = None
+                    link.meta['state'] = self.S_NOT_CRAWLED
                 scheduled += 1
         self.stats['downloaded'] += 1
         self.stats['scheduled'] += scheduled
