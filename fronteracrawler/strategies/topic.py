@@ -11,7 +11,7 @@ class CrawlStrategy(object):
     S_QUEUED = _state.get_id('QUEUED')
     S_NOT_CRAWLED = _state.get_id('NOT_CRAWLED')
     S_ERROR = _state.get_id('ERROR')
-    fetch_limit = 100000
+    fetch_limit = 200
 
     def __init__(self):
         self.canonicalsolver = BasicCanonicalSolver()
@@ -39,6 +39,7 @@ class CrawlStrategy(object):
     def page_crawled(self, response, links):
         scores = {}
         response.meta['state'] = _state.get_id('CRAWLED')
+        url, fingerprint, _ = self.canonicalsolver.get_canonical_url(response)
 
         if 'p_score' not in response.meta:
             drill_down = False
@@ -46,7 +47,13 @@ class CrawlStrategy(object):
             score = response.meta['p_score']
             drill_down = self.classifier.classify_paragraphs(score)
             if drill_down:
-                self.results[response.meta['fingerprint']] = score
+                self.results[fingerprint] = [
+                    score,
+                    url,
+                    response.meta['title'],
+                    response.meta['descr'],
+                    response.meta['keywords'],
+                ]
 
         scheduled = 0
         for link in links:

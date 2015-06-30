@@ -145,6 +145,7 @@ class HHStrategyWorker(ScoringWorker):
                 raise Exception("Error setting new job id")
 
         self.backend.set_job_id(self.job_id)
+        self._in_consumer.seek(0, 2)
 
     def configure(self, config):
         self.strategy.configure(config)
@@ -164,6 +165,21 @@ class HHStrategyWorker(ScoringWorker):
         manager.add_seeds(seeds)
         del manager
 
+    def on_finished(self):
+        self.slot.is_active = False
+        nresults = self.job_config['nResults'] if self.job_config['nResults'] > 0 else None
+        results = sorted(self.strategy.results.items(), reverse=True, key=lambda x: x[1][0])[:nresults]
+        for fprint, result in results:
+            msg = {
+                "score": result[0],
+                "url": result[1],
+                "title": result[2],
+                "descr": result[3],
+                "keywords": result[4],
+                "workspace": self.job_config.get('workspace', None)
+            }
+            self.producer_hh.send_messages(self.outgoing_topic, dumps(msg))
+            print msg
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="HH strategy worker.")
