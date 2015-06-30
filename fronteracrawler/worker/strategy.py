@@ -101,9 +101,10 @@ class HHStrategyWorker(ScoringWorker):
         else:
             self.job_config = job_config
 
-        # Sending configuration to all strategy worker instances
-        self.configure(self.job_config)
-        for location in self.zookeeper.get_workers(prefix=self.worker_prefix):
+        # Sending configuration to all instances
+        locations = list(self.zookeeper.get_workers(prefix=self.worker_prefix)) + \
+                    list(self.zookeeper.get_workers(prefix='spider'))
+        for location in locations:
             if location == self.process_info:
                 continue
             url = "http://%s/jsonrpc" % location
@@ -113,11 +114,12 @@ class HHStrategyWorker(ScoringWorker):
             result = loads(response)
             assert result['id'] == reqid
             if 'result' not in result or result['result'] != "success":
-                logger.error("Can't configure strategy worker %s, error %s" % (location, result['error']))
-                raise Exception("Error configuring strategy workers")
+                logger.error("Can't configure %s, error %s" % (location, result['error']))
+                raise Exception("Error configuring")
+        self.configure(self.job_config)
 
         # Sending seed urls into pipeline
-        requests = [self._manager.request_model(url) for url in seed_urls]
+        requests = [self._manager.request_model(url, meta={'jid': self.job_id}) for url in seed_urls]
         self.send_add_seeds(requests)
 
     def reset(self):
@@ -129,7 +131,7 @@ class HHStrategyWorker(ScoringWorker):
         # make it active if all above is successful.
 
         self.job_id = generate_job_id()
-        for location in self.zookeeper.get_workers():
+        for location in self.zookeeper.get_workers(exclude_prefix='spider'):
             if location == self.process_info:
                 continue
             url = "http://%s/jsonrpc" % location
@@ -150,6 +152,7 @@ class HHStrategyWorker(ScoringWorker):
 
     def set_job_id(self, job_id):
         self.job_id = job_id
+        self.backend.set_job_id(self.job_id)
 
     def send_add_seeds(self, seeds):
         # here we simulate behavior of spider, mainly because of middlewares pipeline
