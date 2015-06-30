@@ -31,6 +31,7 @@ class TopicClassifier(object):
         for word in include: obj.topic[word] = p
         obj.exclude_set = set(exclude)
         obj.threshold = p
+        return obj
 
     def score_paragraphs(self, paragraphs):
         topic_probability = 0.0
