@@ -27,9 +27,11 @@ class ZookeeperSession(object):
     def set(self, value):
         self._zk.set(self.znode_path, value)
 
-    def get_workers(self, prefix=''):
+    def get_workers(self, prefix='', exclude_prefix=''):
         for znode_name in self._zk.get_children(self.root_prefix):
             if prefix and not znode_name.startswith(prefix):
+                continue
+            if exclude_prefix and znode_name.startswith(exclude_prefix):
                 continue
             location, _ = self._zk.get(self.root_prefix+"/"+znode_name)
             yield location
