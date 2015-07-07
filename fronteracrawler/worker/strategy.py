@@ -7,6 +7,7 @@ import logging
 from argparse import ArgumentParser
 from urllib import urlopen
 from json import loads, dumps
+from itertools import islice
 
 from crawlfrontier.settings import Settings
 from crawlfrontier.worker.score import ScoringWorker
@@ -24,11 +25,15 @@ logger = logging.getLogger("score")
 
 
 class Slot(object):
-    def __init__(self, log_processing):
+    def __init__(self, log_processing, incoming, outgoing):
         self.log_processing = CallLaterOnce(log_processing)
         self.log_processing.setErrback(self.error)
+        self.incoming = CallLaterOnce(incoming)
+        self.incoming.setErrback(self.error)
         self.scheduling = CallLaterOnce(self.schedule)
         self.scheduling.setErrback(self.error)
+        self.outgoing = CallLaterOnce(outgoing)
+        self.outgoing.setErrback(self.error)
         self.is_active = False
 
     def error(self, f):
@@ -37,9 +42,10 @@ class Slot(object):
     def schedule(self):
         if self.is_active:
             self.log_processing.schedule()
-
+        else:
+            self.incoming.schedule()
+        self.outgoing.schedule()
         self.scheduling.schedule(1.0)
-
 
 class HHStrategyWorker(ScoringWorker):
 
@@ -68,9 +74,12 @@ class HHStrategyWorker(ScoringWorker):
         reactor.run()
 
     def incoming(self):
+        if self.slot.is_active:
+            return
+
         consumed = 0
         try:
-            for m in self._in_consumer.get_messages(count=32):
+            for m in self._in_consumer.get_messages(count=1):
                 try:
                     msg = loads(m.message.value)
                 except ValueError, ve:
@@ -79,11 +88,12 @@ class HHStrategyWorker(ScoringWorker):
                     self.job_config = {
                         'workspace': msg['workspace'],
                         'nResults': msg.get('nResults', 0),
-                        'timestamp': msg['timestamp'],
-                        'source': msg['source'],
                         'excluded': msg['excluded'],
-                        'included': msg['included']
+                        'included': msg['included'],
+                        'relevantUrl': msg['relevantUrl'],
+                        'irrelevantUrl': msg['irrelevantUrl'],
                     }
+                    self.setup(self.job_config['relevantUrl'], self.job_config)
                 finally:
                     consumed += 1
         except OffsetOutOfRangeError, e:
@@ -92,12 +102,31 @@ class HHStrategyWorker(ScoringWorker):
             logger.info("Caught OffsetOutOfRangeError, moving to the tail of the log.")
 
         self.stats['frontera_incoming_consumed'] = consumed
-        self.slot.schedule()
+
+    def outgoing(self):
+        produced = 0
+        if not self.strategy.results:
+            return
+        items = list(islice(self.strategy.results.iteritems(), 50))
+        for fprint, result in items:
+            msg = {
+                "score": result[0],
+                "url": result[1],
+                "title": result[2],
+                "descr": result[3],
+                "keywords": result[4],
+                "workspace": self.job_config.get('workspace', None)
+            }
+            self.producer_hh.send_messages(self.outgoing_topic, dumps(msg))
+            del self.strategy.results[fprint]
+            produced += 1
+        self.strategy.results.clear()
+        self.stats['frontera_outgoing_produced'] = produced
 
     def setup(self, seed_urls, job_config):
         # Consume configuration from Kafka topic
         if not job_config:
-            self.incoming()
+            raise AttributeError('Expecting for job_config to be set.')
         else:
             self.job_config = job_config
 
@@ -143,9 +172,7 @@ class HHStrategyWorker(ScoringWorker):
             if 'result' not in result or result['result'] != "success":
                 logger.error("Can't set new job id on %s, error %s" % (location, result['error']))
                 raise Exception("Error setting new job id")
-
         self.backend.set_job_id(self.job_id)
-        self._in_consumer.seek(0, 2)
 
     def configure(self, config):
         self.strategy.configure(config)
@@ -179,7 +206,7 @@ class HHStrategyWorker(ScoringWorker):
                 "workspace": self.job_config.get('workspace', None)
             }
             self.producer_hh.send_messages(self.outgoing_topic, dumps(msg))
-            print msg
+
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="HH strategy worker.")
