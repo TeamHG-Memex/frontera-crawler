@@ -7,7 +7,7 @@ class TopicClassifier(object):
 
     def __init__(self):
         self.topic = {}
-        self.threshold = 0.1
+        self.threshold = 0.0
         self.exclude_set = set()
 
     @classmethod
