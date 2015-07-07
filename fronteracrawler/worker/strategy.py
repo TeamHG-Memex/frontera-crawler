@@ -53,7 +53,7 @@ class HHStrategyWorker(ScoringWorker):
 
     def __init__(self, settings):
         super(HHStrategyWorker, self).__init__(settings, topic)
-        self.slot = Slot(log_processing=self.work)
+        self.slot = Slot(log_processing=self.work, incoming=self.incoming, outgoing=self.outgoing)
         kafka_hh = KafkaClient(settings.get('KAFKA_LOCATION_HH'))
         self.consumer_hh = SimpleConsumer(kafka_hh,
                                           settings.get('FRONTERA_GROUP'),
@@ -79,7 +79,7 @@ class HHStrategyWorker(ScoringWorker):
 
         consumed = 0
         try:
-            for m in self._in_consumer.get_messages(count=1):
+            for m in self.consumer_hh.get_messages(count=1):
                 try:
                     msg = loads(m.message.value)
                 except ValueError, ve:
@@ -117,7 +117,7 @@ class HHStrategyWorker(ScoringWorker):
                 "keywords": result[4],
                 "workspace": self.job_config.get('workspace', None)
             }
-            self.producer_hh.send_messages(self.outgoing_topic, dumps(msg))
+            self.producer_hh.send_messages(self.results_topic, dumps(msg))
             del self.strategy.results[fprint]
             produced += 1
         self.strategy.results.clear()
