@@ -16,6 +16,7 @@ class CrawlStrategy(object):
     def __init__(self):
         self.canonicalsolver = BasicCanonicalSolver()
         self.content_processor = ContentProcessor()
+        self.results = {}
 
     def configure(self, config):
         self.classifier = TopicClassifier.from_keywords(config['included'], config['excluded'])
