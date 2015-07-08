@@ -115,7 +115,8 @@ class HHStrategyWorker(ScoringWorker):
                 "title": result[2],
                 "descr": result[3],
                 "keywords": result[4],
-                "workspace": self.job_config.get('workspace', None)
+                "workspace": self.job_config.get('workspace', None),
+                "provider": "Frontera"
             }
             self.producer_hh.send_messages(self.results_topic, dumps(msg))
             del self.strategy.results[fprint]
