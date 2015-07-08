@@ -47,6 +47,7 @@ class Slot(object):
         self.outgoing.schedule()
         self.scheduling.schedule(1.0)
 
+
 class HHStrategyWorker(ScoringWorker):
 
     worker_prefix = 'hh-strategy-worker'
@@ -85,6 +86,7 @@ class HHStrategyWorker(ScoringWorker):
                 except ValueError, ve:
                     logger.error("Decoding error %s, message %s" % (ve, m.message.value))
                 else:
+                    logger.info("Got incoming message %s from incoming topic." % m.message.value)
                     self.job_config = {
                         'workspace': msg['workspace'],
                         'nResults': msg.get('nResults', 0),
@@ -100,7 +102,6 @@ class HHStrategyWorker(ScoringWorker):
             # https://github.com/mumrah/kafka-python/issues/263
             self.consumer_hh.seek(0, 0)  # moving to the tail of the log
             logger.info("HH incoming topic, caught OffsetOutOfRangeError, moving to the tail of the log.")
-
         self.stats['frontera_incoming_consumed'] = consumed
 
     def outgoing(self):
@@ -123,6 +124,8 @@ class HHStrategyWorker(ScoringWorker):
             produced += 1
         self.strategy.results.clear()
         self.stats['frontera_outgoing_produced'] = produced
+        if produced > 0:
+            logger.info("Wrote %d results to output topic." % produced)
 
     def setup(self, seed_urls, job_config):
         # Consume configuration from Kafka topic
@@ -176,6 +179,7 @@ class HHStrategyWorker(ScoringWorker):
         self.backend.set_job_id(self.job_id)
 
     def configure(self, config):
+        logger.info("Got configure call, config is %s" % (str(config)))
         self.strategy.configure(config)
         self.slot.is_active = True
 
@@ -195,18 +199,6 @@ class HHStrategyWorker(ScoringWorker):
 
     def on_finished(self):
         self.slot.is_active = False
-        nresults = self.job_config['nResults'] if self.job_config['nResults'] > 0 else None
-        results = sorted(self.strategy.results.items(), reverse=True, key=lambda x: x[1][0])[:nresults]
-        for fprint, result in results:
-            msg = {
-                "score": result[0],
-                "url": result[1],
-                "title": result[2],
-                "descr": result[3],
-                "keywords": result[4],
-                "workspace": self.job_config.get('workspace', None)
-            }
-            self.producer_hh.send_messages(self.outgoing_topic, dumps(msg))
 
 
 if __name__ == '__main__':
