@@ -98,7 +98,7 @@ class HHStrategyWorker(ScoringWorker):
                     consumed += 1
         except OffsetOutOfRangeError, e:
             # https://github.com/mumrah/kafka-python/issues/263
-            self._in_consumer.seek(0, 2)  # moving to the tail of the log
+            self.consumer_hh.seek(0, 0)  # moving to the tail of the log
             logger.info("HH incoming topic, caught OffsetOutOfRangeError, moving to the tail of the log.")
 
         self.stats['frontera_incoming_consumed'] = consumed
