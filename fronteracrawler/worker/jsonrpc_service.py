@@ -23,6 +23,7 @@ class ManagementResource(WorkerJsonRpcResource):
     ws_name = 'jsonrpc'
 
     def process_request(self, method, jrequest):
+        # master methods
         if method == 'setup':
             self.worker.setup(jrequest['params']['seed_urls'], jrequest['params'].get('job_config', None))
             return jsonrpc_result(jrequest['id'], "success")
@@ -30,12 +31,12 @@ class ManagementResource(WorkerJsonRpcResource):
             self.worker.reset()
             return jsonrpc_result(jrequest['id'], {"status": "success", "job_id": self.worker.job_id})
 
+        # slave
         if method == 'configure':
             if type(jrequest['params']) != dict:
                 raise JsonRpcError(400, "Expecting dict with configuration parameters.")
             self.worker.configure(jrequest['params'])
             return jsonrpc_result(jrequest['id'], "success")
-
         if method == 'new_job_id':
             if type(jrequest['job_id']) != int or jrequest['job_id'] <= 0:
                 raise JsonRpcError(400, "Job id must be of type unsigned integer, bigger than 0")
