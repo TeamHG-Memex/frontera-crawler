@@ -11,7 +11,7 @@ class CrawlStrategy(object):
     S_QUEUED = _state.get_id('QUEUED')
     S_NOT_CRAWLED = _state.get_id('NOT_CRAWLED')
     S_ERROR = _state.get_id('ERROR')
-    fetch_limit = 200
+    fetch_limit = 100000
 
     def __init__(self):
         self.canonicalsolver = BasicCanonicalSolver()
@@ -20,7 +20,7 @@ class CrawlStrategy(object):
 
     def configure(self, config):
         self.classifier = TopicClassifier.from_keywords(config['included'], config['excluded'])
-        self.max_doc_count = config['nResults']
+        self.fetch_limit = config['nResults']
         self.results = {}
         self.stats = {
             'downloaded': 0,
