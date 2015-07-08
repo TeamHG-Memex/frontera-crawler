@@ -25,7 +25,7 @@ logger = logging.getLogger("score")
 
 
 class Slot(object):
-    def __init__(self, log_processing, incoming, outgoing):
+    def __init__(self, log_processing, incoming, outgoing, is_master):
         self.log_processing = CallLaterOnce(log_processing)
         self.log_processing.setErrback(self.error)
         self.incoming = CallLaterOnce(incoming)
@@ -35,6 +35,7 @@ class Slot(object):
         self.outgoing = CallLaterOnce(outgoing)
         self.outgoing.setErrback(self.error)
         self.is_active = False
+        self.is_master = is_master
 
     def error(self, f):
         logger.error(f)
@@ -42,7 +43,7 @@ class Slot(object):
     def schedule(self):
         if self.is_active:
             self.log_processing.schedule()
-        else:
+        elif self.is_master:
             self.incoming.schedule()
         self.outgoing.schedule()
         self.scheduling.schedule(1.0)
@@ -54,7 +55,8 @@ class HHStrategyWorker(ScoringWorker):
 
     def __init__(self, settings):
         super(HHStrategyWorker, self).__init__(settings, topic)
-        self.slot = Slot(log_processing=self.work, incoming=self.incoming, outgoing=self.outgoing)
+        self.slot = Slot(log_processing=self.work, incoming=self.incoming, outgoing=self.outgoing,
+                         is_master=settings.get("FRONTERA_MASTER"))
         kafka_hh = KafkaClient(settings.get('KAFKA_LOCATION_HH'))
         self.consumer_hh = SimpleConsumer(kafka_hh,
                                           settings.get('FRONTERA_GROUP'),
@@ -78,6 +80,9 @@ class HHStrategyWorker(ScoringWorker):
         if self.slot.is_active:
             return
 
+        if not self.slot.is_master:
+            logger.warn("Incoming topic shouldn't be consumed on slave instances.")
+
         consumed = 0
         try:
             for m in self.consumer_hh.get_messages(count=1):
@@ -95,6 +100,7 @@ class HHStrategyWorker(ScoringWorker):
                         'relevantUrl': msg['relevantUrl'],
                         'irrelevantUrl': msg['irrelevantUrl'],
                     }
+                    self.reset()
                     self.setup(self.job_config['relevantUrl'], self.job_config)
                 finally:
                     consumed += 1
@@ -207,10 +213,14 @@ if __name__ == '__main__':
                         help='Settings module name, should be accessible by import')
     parser.add_argument('--log-level', '-L', type=str, default='INFO',
                         help="Log level, for ex. DEBUG, INFO, WARN, ERROR, FATAL")
+    parser.add_argument('--master', '-m', action='store_true')
 
     args = parser.parse_args()
     logger.setLevel(args.log_level)
     settings = Settings(module=args.config)
+    settings.set("FRONTERA_MASTER", args.master)
+    if args.master:
+        logger.info("Configured as MASTER")
     worker = HHStrategyWorker(settings)
     web_service = StrategyWorkerWebService(worker, settings)
     web_service.start_listening()
