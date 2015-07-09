@@ -124,7 +124,7 @@ class HHStrategyWorker(ScoringWorker):
                 "score": result[0],
                 "url": result[1],
                 "title": result[2],
-                "descr": result[3],
+                "desc": result[3],
                 "keywords": result[4],
                 "workspace": self.job_config.get('workspace', None),
                 "provider": "Frontera"
