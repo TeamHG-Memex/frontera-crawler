@@ -74,6 +74,11 @@ class HHStrategyWorker(ScoringWorker):
 
     def run(self):
         self.slot.schedule()
+
+        reset = CallLaterOnce(self.reset)
+        reset.setErrback(self.slot.error)
+        reset.schedule(5.0)
+
         reactor.run()
 
     def incoming(self):
