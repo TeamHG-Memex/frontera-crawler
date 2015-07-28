@@ -143,13 +143,12 @@ class HHStrategyWorker(ScoringWorker):
                 "url": result[1],
                 "urlDesc": result[2],     # title
                 "desc": result[3],
-                "workspace": self.job_config.get('workspace', None),
+                "workspace": self.job_config['workspace'],
                 "provider": "Frontera"
             }
             self.producer_hh.send_messages(self.results_topic, dumps(msg))
             del self.strategy.results[fprint]
             produced += 1
-        self.strategy.results.clear()
         self.stats['frontera_outgoing_produced'] = produced
         if produced > 0:
             logger.info("Wrote %d results to output topic." % produced)
