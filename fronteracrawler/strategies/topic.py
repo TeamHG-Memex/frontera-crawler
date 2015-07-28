@@ -11,7 +11,7 @@ class CrawlStrategy(object):
     S_QUEUED = _state.get_id('QUEUED')
     S_NOT_CRAWLED = _state.get_id('NOT_CRAWLED')
     S_ERROR = _state.get_id('ERROR')
-    fetch_limit = 100000
+    fetch_limit = 100
 
     def __init__(self):
         self.canonicalsolver = BasicCanonicalSolver()
@@ -80,4 +80,4 @@ class CrawlStrategy(object):
         return {fingerprint: 0.0}
 
     def finished(self):
-        return self.stats['downloaded'] + self.stats['errors'] > self.fetch_limit
+        return len(self.results) > self.fetch_limit

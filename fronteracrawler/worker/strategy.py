@@ -67,6 +67,7 @@ class HHStrategyWorker(ScoringWorker):
         self.results_topic = settings.get("FRONTERA_RESULTS_TOPIC")
         self.job_config = {}
         self.zookeeper = ZookeeperSession(settings.get('ZOOKEEPER_LOCATION'), name_prefix=self.worker_prefix)
+        self.partitions_count = settings.get('HBASE_QUEUE_PARTITIONS')
 
     def set_process_info(self, process_info):
         self.process_info = process_info
@@ -99,7 +100,7 @@ class HHStrategyWorker(ScoringWorker):
                     logger.info("Got incoming message %s from incoming topic." % m.message.value)
                     self.job_config = {
                         'workspace': msg['workspace'],
-                        'nResults': msg.get('nResults', 0),
+                        'nResults': msg.get('nResults', 0) / self.partitions_count,
                         'excluded': msg['excluded'],
                         'included': msg['included'],
                         'relevantUrl': msg['relevantUrl'],
