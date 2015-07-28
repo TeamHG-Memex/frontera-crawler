@@ -110,7 +110,7 @@ class HHStrategyWorker(ScoringWorker):
                     logger.error("Decoding error %s, message %s" % (ve, m.message.value))
                 else:
                     logger.info("Got incoming message %s from incoming topic." % m.message.value)
-                    self.job_config = {
+                    job_config = {
                         'workspace': msg['workspace'],
                         'nResults': msg.get('nResults', 0) / self.partitions_count,
                         'excluded': msg['excluded'],
@@ -119,7 +119,7 @@ class HHStrategyWorker(ScoringWorker):
                         'irrelevantUrl': msg['irrelevantUrl'],
                     }
                     self.reset()
-                    self.setup(self.job_config['relevantUrl'], self.job_config)
+                    self.setup(job_config['relevantUrl'], job_config)
                 finally:
                     consumed += 1
         except OffsetOutOfRangeError, e:
@@ -157,8 +157,6 @@ class HHStrategyWorker(ScoringWorker):
         # Consume configuration from Kafka topic
         if not job_config:
             raise AttributeError('Expecting for job_config to be set.')
-        else:
-            self.job_config = job_config
 
         # Sending configuration to all instances
         locations = list(self.zookeeper.get_workers(prefix=self.worker_prefix)) + \
@@ -168,14 +166,14 @@ class HHStrategyWorker(ScoringWorker):
                 continue
             url = "http://%s/jsonrpc" % location
             reqid = generate_job_id()
-            data = '{"id": %d, "method": "configure", "params": %s}' % (reqid, dumps(self.job_config))
+            data = '{"id": %d, "method": "configure", "params": %s}' % (reqid, dumps(job_config))
             response = urlopen(url, data).read()
             result = loads(response)
             assert result['id'] == reqid
             if 'result' not in result or result['result'] != "success":
                 logger.error("Can't configure %s, error %s" % (location, result['error']))
                 raise Exception("Error configuring")
-        self.configure(self.job_config)
+        self.configure(job_config)
 
         # Sending seed urls into pipeline
         requests = [self._manager.request_model(url, meta={'jid': self.job_id}) for url in seed_urls]
@@ -207,6 +205,7 @@ class HHStrategyWorker(ScoringWorker):
     def configure(self, config):
         logger.info("Got configure call, config is %s" % (str(config)))
         self.strategy.configure(config)
+        self.job_config = config
         self.slot.is_active = True
 
     def set_job_id(self, job_id):
