@@ -68,6 +68,7 @@ class HHStrategyWorker(ScoringWorker):
         self.job_config = {}
         self.zookeeper = ZookeeperSession(settings.get('ZOOKEEPER_LOCATION'), name_prefix=self.worker_prefix)
         self.partitions_count = settings.get('HBASE_QUEUE_PARTITIONS')
+        self.null_cycles = 0
 
     def set_process_info(self, process_info):
         self.process_info = process_info
@@ -81,6 +82,17 @@ class HHStrategyWorker(ScoringWorker):
             reset.schedule(5.0)
 
         reactor.run()
+
+    def work(self):
+        super(HHStrategyWorker, self).work()
+        if self.stats['last_consumed'] == 0:
+            self.null_cycles += 1
+        else:
+            self.null_cycles = 0
+        if self.null_cycles == 500:
+            logger.info("It seems crawler got stuck, performing self reset.")
+            self.reset()
+            self.null_cycles = 0
 
     def incoming(self):
         if self.slot.is_active:
