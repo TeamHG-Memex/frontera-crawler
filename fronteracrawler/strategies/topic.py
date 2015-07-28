@@ -17,6 +17,7 @@ class CrawlStrategy(object):
         self.canonicalsolver = BasicCanonicalSolver()
         self.content_processor = ContentProcessor()
         self.results = {}
+        self.results_collected = 0
 
     def configure(self, config):
         self.classifier = TopicClassifier.from_keywords(config['included'], config['excluded'])
@@ -27,6 +28,7 @@ class CrawlStrategy(object):
             'errors': 0,
             'scheduled': 0
         }
+        self.results_collected = 0
 
     def add_seeds(self, seeds):
         scores = {}
@@ -55,6 +57,7 @@ class CrawlStrategy(object):
                     response.meta['descr'],
                     response.meta['keywords'],
                 ]
+                self.results_collected += 1
 
         scheduled = 0
         for link in links:
@@ -80,4 +83,4 @@ class CrawlStrategy(object):
         return {fingerprint: 0.0}
 
     def finished(self):
-        return len(self.results) > self.fetch_limit
+        return self.results_collected > self.fetch_limit
