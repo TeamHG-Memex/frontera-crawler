@@ -67,7 +67,9 @@ class HHStrategyWorker(ScoringWorker):
         self.results_topic = settings.get("FRONTERA_RESULTS_TOPIC")
         self.job_config = {}
         self.zookeeper = ZookeeperSession(settings.get('ZOOKEEPER_LOCATION'), name_prefix=self.worker_prefix)
-        self.partitions_count = settings.get('HBASE_QUEUE_PARTITIONS')
+
+        kafka = KafkaClient(settings.get('KAFKA_LOCATION'))
+        self.partitions_count = len(kafka.get_partition_ids_for_topic(settings.get('INCOMING_TOPIC')))
         self.null_cycles = 0
 
     def set_process_info(self, process_info):
