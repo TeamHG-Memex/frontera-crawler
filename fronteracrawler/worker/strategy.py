@@ -62,7 +62,8 @@ class HHStrategyWorker(ScoringWorker):
                                           settings.get('FRONTERA_GROUP'),
                                           settings.get('FRONTERA_INCOMING_TOPIC'),
                                           buffer_size=262144,
-                                          max_buffer_size=10485760)
+                                          max_buffer_size=10485760,
+                                          auto_commit_every_n=1)
         self.producer_hh = SimpleProducer(kafka_hh)
         self.results_topic = settings.get("FRONTERA_RESULTS_TOPIC")
         self.job_config = {}
@@ -77,12 +78,16 @@ class HHStrategyWorker(ScoringWorker):
         self.zookeeper.set(process_info)
 
     def run(self):
-        self.slot.schedule()
+        def onStart():
+            self.reset()
+            self.slot.schedule()
+
         if self.slot.is_master:
-            reset = CallLaterOnce(self.reset)
+            reset = CallLaterOnce(onStart)
             reset.setErrback(self.slot.error)
             reset.schedule(5.0)
-
+        else:
+            self.slot.schedule()
         reactor.run()
 
     def work(self):
